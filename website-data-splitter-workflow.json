@@ -1,0 +1,437 @@
+{
+  "name": "website-data-splitter-workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "website-audit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "be84ff88-713a-4dfb-9606-0e0b8f7205fe",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        0
+      ],
+      "webhookId": "f2a9523a-5021-4523-8bac-37e471b508ef"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "string"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "d81e7849-d9fa-489e-8e65-1964dc580849",
+      "name": "Website Crawler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "extractionValues": {
+          "values": [
+            {
+              "key": "text",
+              "cssSelector": "body"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9fc93cb1-dc9a-4619-a028-b2030a64c643",
+      "name": "HTML to Text",
+      "type": "n8n-nodes-base.htmlExtract",
+      "typeVersion": 1,
+      "position": [
+        544,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $(\"Webhook Trigger\").first().json.url }}"
+            },
+            {
+              "name": "strategy",
+              "value": "mobile"
+            },
+            {
+              "name": "category",
+              "value": "performance"
+            },
+            {
+              "name": "category",
+              "value": "seo"
+            },
+            {
+              "name": "category",
+              "value": "best-practices"
+            },
+            {
+              "name": "category",
+              "value": "accessibility"
+            },
+            {
+              "name": "key",
+              "value": "={{ $vars.PAGESPEED_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "0ee47e25-c589-40ae-91bb-c3a4f94c7867",
+      "name": "PageSpeed Insights API - REAL METRICS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        768,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const htmlData = $('Website Crawler').first().json;\nconst html = htmlData.body || htmlData.data || htmlData || '';\nconst htmlStr = typeof html === 'string'? html : JSON.stringify(html);\nconst pageSpeed = $('PageSpeed Insights API - REAL METRICS').first()?.json || {};\nconst lh = pageSpeed.lighthouseResult || {};\nconst categories = lh.categories || {};\nconst audits = lh.audits || {};\nconst titleMatch = htmlStr.match(/<title[^>]*>(.*?)<\\/title>/i);\nconst metaDescMatch = htmlStr.match(/<meta[^>]*name=[\\\"']description[\\\"'][^>]*content=[\\\"']([^\\\"']*)[\\\"']/i) || htmlStr.match(/<meta[^>]*content=[\\\"']([^\\\"']*)[\\\"'][^>]*name=[\\\"']description[\\\"']/i);\nconst h1Matches = (htmlStr.match(/<h1[^>]*>/gi) || []);\nconst allLinks = [...htmlStr.matchAll(/<a[^>]*href=[\\\"'](https?:\\/\\/[^\\\"']+)[\\\"']/gi)].map(m=>m[1]);\nlet internalLinks = 0;\ntry { const host = new URL($('Webhook Trigger').first().json.url).hostname; internalLinks = allLinks.filter(l => { try { return new URL(l).hostname === host; } catch { return false; } }).length; } catch {}\nconst perfScore = categories.performance? Math.round(categories.performance.score * 100) : null;\nconst seoScore = categories.seo? Math.round(categories.seo.score * 100) : null;\nreturn [{ json: { url: $('Webhook Trigger').first().json.url, realMetrics: { performanceScore: perfScore, seoScore: seoScore, accessibilityScore: categories.accessibility? Math.round(categories.accessibility.score*100): null, bestPracticesScore: categories['best-practices']? Math.round(categories['best-practices'].score*100): null, LCP: audits['largest-contentful-paint']?.displayValue || 'N/A', CLS: audits['cumulative-layout-shift']?.displayValue || 'N/A', speedIndex: audits['speed-index']?.displayValue || 'N/A', FCP: audits['first-contentful-paint']?.displayValue || 'N/A', hasTitle:!!titleMatch, titleText: titleMatch? titleMatch[1].substring(0,120) : 'MISSING', hasMetaDesc:!!metaDescMatch, metaDescText: metaDescMatch? metaDescMatch[1].substring(0,160) : 'MISSING', h1Count: h1Matches.length, totalLinks: allLinks.length, internalLinks: internalLinks, externalLinks: allLinks.length - internalLinks }, rawHtmlLength: htmlStr.length, text: $('HTML to Text').first().json.text || '' } }];\n"
+      },
+      "id": "9f8906d5-216a-4252-86f9-eb65e4b338c3",
+      "name": "SEO Technical Checker - REAL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('SEO Technical Checker - REAL').first().json;\nconst text = input.text || '';\nconst url = input.url;\nconst CHUNK_SIZE = 1000;\nconst OVERLAP = 200;\nconst results = [];\nlet start = 0;\nwhile (start < text.length) {\n let end = Math.min(start + CHUNK_SIZE, text.length);\n if (end < text.length) {\n const lastPara = text.lastIndexOf('\\n\\n', end);\n const lastDot = text.lastIndexOf('. ', end);\n const cut = Math.max(lastPara, lastDot);\n if (cut > start + 500) end = cut + 1;\n }\n const chunk = text.slice(start, end).trim();\n if (chunk.length > 100) results.push({ json: { chunk, url, index: results.length } });\n start = end - OVERLAP;\n if (results.length >= 20) break;\n}\nif (results.length === 0) results.push({ json: { chunk: text.slice(0,1000) || 'No content found', url, index: 0 } });\nreturn results;"
+      },
+      "id": "1203dc64-a5d3-45ea-ad10-c26678a6383d",
+      "name": "Text Splitter - PRO 1000/200",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const trigger = $('Webhook Trigger').first().json;\nreturn [{json:{query: trigger.query || 'Top 3 SEO issues batao', url: trigger.url}}];"
+      },
+      "id": "cb550ba8-8264-405c-9b69-d7d88feb82a4",
+      "name": "User Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $vars.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "= { \"model\": \"models/text-embedding-004\", \"content\": { \"parts\": [{ \"text\": $json.query }] } }",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "eb8ce490-bdb9-4bd5-94dd-b3fe47234250",
+      "name": "User Query Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        528,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $vars.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"models/text-embedding-004\", \"content\": { \"parts\": [{ \"text\": $json.chunk }] } }",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "8d21d9c3-87a7-4948-9543-0d1404c0cf45",
+      "name": "Generate Embeddings - REAL VECTOR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1424,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// V7.2 FIXED - Robust Vector Search\nconst genEmbeds = $('Generate Embeddings - REAL VECTOR').all;\nconst splitterData = $('Text Splitter - PRO 1000/200').all;\nconst qData = $('User Query Embedding').first()?.json;\nconst queryEmbedding = qData?.embedding?.values || qData?.embedding || [];\n\nfunction cosine(a,b){\n  if(!a?.length || !b?.length) return 0;\n  let dot=0, ma=0, mb=0;\n  const len = Math.min(a.length,b.length);\n  for(let i=0;i<len;i++){ dot+=a[i]*b[i]; ma+=a[i]*a[i]; mb+=b[i]*b[i]; }\n  const denom = Math.sqrt(ma)*Math.sqrt(mb);\n  return denom===0?0:dot/denom;\n}\n\nlet vectors = genEmbeds.map((item, i) => {\n  const split = splitterData[i]?.json || splitterData[0]?.json || {};\n  const chunk = split.chunk || item.json.chunk || '';\n  const emb = item.json.embedding?.values || item.json.embedding || [];\n  return { chunk, embedding: emb, url: split.url || $('Webhook Trigger').first().json.url, index: i, score: 0 };\n}).filter(v => v.chunk && v.embedding.length > 0);\n\nif(queryEmbedding.length > 0){\n  vectors.forEach(v => v.score = cosine(v.embedding, queryEmbedding));\n  vectors.sort((a,b) => b.score - a.score);\n} else {\n  vectors.forEach((v,i)=> v.score = 5-i);\n}\n\nconst topVectors = vectors.slice(0,5);\nreturn [{\n  json: {\n    vectors: topVectors.map(v => ({ chunk: v.chunk, url: v.url, score: Number(v.score?.toFixed(4)) })),\n    count: vectors.length,\n    topCount: topVectors.length,\n    status: 'V7.2-FIXED-real-cosine',\n    hasQueryEmbed: queryEmbedding.length > 0,\n    realMetrics: $('SEO Technical Checker - REAL').first().json.realMetrics\n  }\n}];\n"
+      },
+      "id": "3f1982d1-c0d6-4649-9522-085dfebdc1d3",
+      "name": "Store in Memory - VECTOR DB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $vars.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "= {{ { contents: [{ role: 'user', parts: [{ text: \"You are COMMERCIAL SEO Audit Expert. Use REAL metrics, not guesses.\\n\\nWebsite: \" + $('Webhook Trigger').first().json.url + \"\\nUser Question: \" + $('User Query').first().json.query + \"\\n\\nREAL SEO METRICS (from PageSpeed + HTML Checker):\\n\" + JSON.stringify($('SEO Technical Checker - REAL').first().json.realMetrics, null, 2) + \"\\n\\nRELEVANT CONTENT CHUNKS (Top 5 semantically searched from Vector DB):\\n\" + $('Store in Memory - VECTOR DB').first().json.vectors.map((v,i)=> `[Chunk ${i+1} Score:${v.score}] ${v.chunk.substring(0,700)}`).join('\\n---\\n') + \"\\n\\nTask: Give 4-5 commercial audit points. Each must have: 1) Issue with REAL metric value, 2) Why (Hinglish - 1 line), 3) Fix (exact code/tag). Include Core Web Vitals if available. Keep under 250 words.\" }] }] } }",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "2884d3df-530a-4394-85d9-359d51743c28",
+      "name": "Gemini 2.0 Flash - Commercial Audit LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2048,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {}
+      },
+      "id": "df45a16f-9ad5-404d-891e-ff42e7a5b522",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "mergeByFields": {
+          "values": []
+        },
+        "options": {
+          "multipleMatches": "all"
+        }
+      },
+      "id": "ef907104-2e24-4707-8edf-76229afe606d",
+      "name": "Merge - Wait for Both Embeddings",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [
+        1664,
+        160
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Website Crawler",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "User Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website Crawler": {
+      "main": [
+        [
+          {
+            "node": "HTML to Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML to Text": {
+      "main": [
+        [
+          {
+            "node": "PageSpeed Insights API - REAL METRICS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Insights API - REAL METRICS": {
+      "main": [
+        [
+          {
+            "node": "SEO Technical Checker - REAL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEO Technical Checker - REAL": {
+      "main": [
+        [
+          {
+            "node": "Text Splitter - PRO 1000/200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Splitter - PRO 1000/200": {
+      "main": [
+        [
+          {
+            "node": "Generate Embeddings - REAL VECTOR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Query": {
+      "main": [
+        [
+          {
+            "node": "User Query Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embeddings - REAL VECTOR": {
+      "main": [
+        [
+          {
+            "node": "Merge - Wait for Both Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in Memory - VECTOR DB": {
+      "main": [
+        [
+          {
+            "node": "Gemini 2.0 Flash - Commercial Audit LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Query Embedding": {
+      "main": [
+        [
+          {
+            "node": "Merge - Wait for Both Embeddings",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge - Wait for Both Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Store in Memory - VECTOR DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 2.0 Flash - Commercial Audit LLM": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "156466d0-1759-4617-8b07-8a9346cd747d",
+  "meta": {
+    "instanceId": "514590788f5872c00d3fe858cf233715b6aa1a0261bbe5c134ec6df4db37b2ec"
+  },
+  "nodeGroups": [],
+  "id": "2ecke349X7CtDvAw",
+  "tags": []
+}

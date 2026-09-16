@@ -1,0 +1,450 @@
+{
+  "name": "AI Powered: Autonomous Real Estate NLP & Intent Engine -",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "real-estate-lead-capture",
+        "options": {}
+      },
+      "id": "cc0287e8-777f-4ed5-9705-83afc84eaf77",
+      "name": "Lead Source Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1408,
+        144
+      ],
+      "webhookId": "0b253c99-b412-4518-9356-d46923a11b48"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean, Deep Extract Text, and Duplicate Security\nconst inputData = $input.first().json;\n\n// 1. Helper function to deep scan and find the real string message\nfunction extractRealText(obj) {\n    if (!obj) return \"\";\n    if (typeof obj === 'string') return obj;\n    \n    // Agar text key ke andar direct body string hai\n    if (obj.text && typeof obj.text === 'string') return obj.text;\n    if (obj.body && typeof obj.body === 'string') return obj.body;\n    if (obj.message && typeof obj.message === 'string') return obj.message;\n    \n    // Whatsapp specific nested templates check\n    if (obj.text && typeof obj.text === 'object') {\n        if (obj.text.body) return obj.text.body;\n    }\n    \n    // Deep loop inside arrays or objects to find raw message\n    for (let key in obj) {\n        if (obj.hasOwnProperty(key) && typeof obj[key] === 'object') {\n            let nested = extractRealText(obj[key]);\n            if (nested && nested !== \"[object Object]\") return nested;\n        } else if (key === 'text' || key === 'body' || key === 'message' || key === 'data') {\n            if (obj[key] && typeof obj[key] !== 'object') return String(obj[key]);\n        }\n    }\n    return \"\";\n}\n\n// 2. Execute deep parsing on body or the entire payload\nlet incomingBody = inputData.body || inputData;\nlet msgText = extractRealText(incomingBody).trim();\n\n// Fallback logic agar fir bhi text na mile\nif (!msgText || msgText === \"[object Object]\") {\n    msgText = inputData.text || (inputData.body ? (inputData.body.text || inputData.body.body || \"\") : \"\");\n    if (typeof msgText === 'object') msgText = JSON.stringify(msgText);\n}\nmsgText = String(msgText).trim();\n\n// 3. Phone normalization logic\nlet rawPhone = String(incomingBody.phone || incomingBody.mobile || incomingBody.from || \"\").replace(/\\D/g, '');\nconst phoneMatch = msgText.match(/\\b\\d{10}/);\nif (rawPhone.length < 10 && phoneMatch) { rawPhone = phoneMatch[0]; }\nif (rawPhone.length === 10) rawPhone = \"91\" + rawPhone;\nif (rawPhone.length < 10) rawPhone = \"917049869870\";\n\n// 4. Customer Name extractor\nlet customerName = String(incomingBody.senderName || incomingBody.name || incomingBody.pushName || \"\").trim();\nif (!customerName || customerName === \"undefined\" || customerName === \"[object Object]\") {\n    customerName = \"Verified Investor\";\n}\n\n// 5. DUPLICATE SECURITY ENGINE\nlet isDuplicateMessage = false;\ntry {\n    const nodeContext = this.getContext('node');\n    const lastMessageKey = `last_msg_${rawPhone}`;\n    const lastTimestampKey = `last_time_${rawPhone}`;\n    \n    const lastMsg = nodeContext[lastMessageKey];\n    const lastTime = nodeContext[lastTimestampKey];\n    const currentTime = Date.now();\n\n    if (lastMsg === msgText || (lastTime && (currentTime - lastTime < 3000))) {\n        isDuplicateMessage = true;\n    }\n\n    nodeContext[lastMessageKey] = msgText;\n    nodeContext[lastTimestampKey] = currentTime;\n} catch (e) {\n    isDuplicateMessage = false;\n}\n\nreturn [{ \n  json: { \n    customerName: customerName, \n    customerPhone: rawPhone, \n    rawIncomingMessage: msgText, \n    leadTimestamp: new Date().toISOString(),\n    isDuplicate: isDuplicateMessage\n  } \n}];\n"
+      },
+      "id": "560adbcb-c7ae-43d3-b604-bf6360f3ea18",
+      "name": "NORMALIZE_REALESTATE_LEAD",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1168,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "prompt": "={{\n`You are an elite, white-label Autonomous Real Estate AI Engine operating exclusively for luxury highway plots in Hyderabad, running on the advanced Gemini 3.5 platform. Your sole job is to accurately extract variables and generate highly professional, premium client copies with luxury executive formatting.\n\nAnalyze this raw incoming customer message:\n\"${$('NORMALIZE_REALESTATE_LEAD').first().json.rawIncomingMessage}\"\n\nCRITICAL CONTEXT FOR SYSTEM TIME CALCULATIONS:\n- Current Live Reference Timestamp: ${$('NORMALIZE_REALESTATE_LEAD').first().json.leadTimestamp}\n- Day Name of Reference: ${new Date($('NORMALIZE_REALESTATE_LEAD').first().json.leadTimestamp).toLocaleDateString('en-US', { weekday: 'long' })}\n[STRICT DATE CALCULATION RULE]: \n- Parse the live reference timestamp above. If today is Wednesday, Sept 16, 2026, and the user mentions \"next Sunday\" or \"this Sunday\", you must mathematically map it to the immediate upcoming Sunday, which is **2026-09-20**. Do NOT jump to the next week unless they explicitly state \"Sunday after next week\". \n- Format for 'appointment_date' must strictly be YYYY-MM-DD.\n\nSTRICT VARIABLE EXTRACTION & FALLBACK RULE:\n- If the user explicitly states \"keep my preferences same\", \"same location\", or \"same budget\" without repeating the exact words (like Warangal Highway or 75 Lakhs), you MUST set the JSON values for 'budget' and 'preferredHighway' as \"As Per Previous Preference 💼\" instead of leaving them empty or writing \"Not Specified\".\n\nSTRICT LAUNCH LOGIC FOR DYNAMIC WHATSAPP RESPONSES:\n- Conditionally generate the 'whatsapp_message' value based on the detected intent using these exact styled layouts:\n\n1. For BOOK_VISIT (Create): \"✨ *PREMIUM PRIVÉ VIEWING* ✨\\n\\nDear [Extract Name/Investor],\\n\\nYour exclusive site tour for our **Premium Highway Plotted Developments** has been officially scheduled. 🏛️\\n\\n📋 *RESERVATION DETAILS*\\n🔹 *Status:* Confirmed & Secured 🤝\\n🔹 *Date:* [Insert Computed YYYY-MM-DD] 📅\\n🔹 *Time:* [Extract Time] ⏰\\n🔹 *Corridor:* [Extract Highway Corridor] 📍\\n\\nOur Senior Portfolio Manager will personally host you to walk through the RERA layouts and investment yields. We look forward to delivering a world-class acquisition experience. 👑💼\\n\\n*Elite Land Holdings* | *Executive Desk*\"\n\n2. For RESCHEDULE_VISIT (Update): \"🔄 *SCHEDULE AMENDMENT NOTICE* 🔄\\n\\nDear [Extract Name/Investor],\\n\\nAs requested, we have successfully modified your private site tour parameters. Your updated itinerary is now active. 💼✨\\n\\n📋 *REVISED ITINERARY*\\n🔹 *Status:* Rescheduled Successfully 🔄\\n🔹 *New Date:* [Insert Computed YYYY-MM-DD] 📅\\n🔹 *New Time:* [Extract Time] ⏰\\n🔹 *Corridor:* [Extract Highway Corridor] 📍\\n\\nAssuring you of our finest advisory services at all times. We look forward to welcoming you. 👑\\n\\n*Elite Land Holdings* | *Executive Desk*\"\n\n3. For CANCEL_REQUEST (Cancel): \"💎 *ACCOUNT ADVISORY* 💎\\n\\nDear [Extract Name/Investor],\\n\\nWe acknowledge the cancellation of your scheduled site viewing layout tour. We completely understand that executive schedules can shift. 🌐\\n\\nYour reservation slot has been safely released. Should you wish to explore our high-yielding property portfolio or reactivate your request in the future, our desk remains at your service. ✨\\n\\nHave a distinguished day ahead.\\n\\n*Elite Land Holdings* | *Executive Desk*\"\n\n4. For GENERAL_INQUIRY (Inquiry): \"🏢 *PORTFOLIO INQUIRY* 🏢\\n\\nDear [Extract Name/Investor],\\n\\nThank you for reaching out to our executive desk. We specialize in high-yield, RERA-approved infrastructure corridors tailored for institutional and high-net-worth investments. 📈✨\\n\\nTo curate a highly personalized investment brief for you, could you kindly specify your preferred highway corridor or target capital allocation budget? 🛣️\\n\\nLooking forward to a premium wealth-building association.\\n\\n*Elite Land Holdings* | *Executive Desk*\"\n\nSTRICTLY RETURN A RAW VALID JSON OBJECT only. No markdown, no backticks, no wrap text:\n{\n  \"whatsapp_message\": \"Select the correct framework text from the 4 rules above based on intent. Replace placeholders with extracted info. Keep spacing clean, bold headers exactly as styled.\",\n  \"final_operation\": \"Determine accurately: BOOK_VISIT / RESCHEDULE_VISIT / CANCEL_REQUEST / GENERAL_INQUIRY\",\n  \"appointment_date\": \"Output strictly in YYYY-MM-DD format based on mathematical system context. If none or cancelled, output empty string \\\"\\\".\",\n  \"appointment_time\": \"Extract target time (e.g., '11:30 AM'). If none, output \\\"\\\".\",\n  \"budget\": \"Extract exact price/budget statement. If user says 'same budget', output 'As Per Previous Preference 💼'. If none, output \\\"\\\".\",\n  \"preferredHighway\": \"Extract target highway corridor. If user says 'same location', output 'As Per Previous Preference 💼'. If none, output \\\"\\\".\",\n  \"propertyType\": \"Plot\",\n  \"lead_quality\": \"Mark as 'HOT' if operation is booking/reschedule; else 'WARM'.\"\n}`\n}}\n"
+      },
+      "id": "139fabdf-a592-4bb4-8c8b-459e2739f87e",
+      "name": "AI_INVESTOR_PROFILER",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        128
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash-lite",
+        "options": {}
+      },
+      "id": "04dcdb4d-ea53-45d0-b43f-0e033b426fdb",
+      "name": "Gemini Model Config",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        240
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Gj1urJF2rkIwLubd",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData = $('NORMALIZE_REALESTATE_LEAD').first().json;\nconst aiRaw = String($input.first()?.json?.response ?? $input.first()?.json?.text ?? '').trim();\n\n// Default values safely setup\nlet ai = { \n  whatsapp_message: \"\", \n  final_operation: \"GENERAL_INQUIRY\", \n  appointment_date: \"\", \n  appointment_time: \"\", \n  budget: \"\", \n  preferredHighway: \"\", \n  propertyType: \"Plot\", \n  lead_quality: \"WARM\" \n};\n\ntry {\n  const cleaned = aiRaw.replace(/^```json\\s*/i, '').replace(/```\\s*$/i, '').trim();\n  ai = JSON.parse(cleaned);\n} catch(e) {\n  // Safe user fallback response if JSON parsing errors out\n  ai.whatsapp_message = \"Dear Investor, Thank you for contacting us. We have received your query regarding Madhu Nag Premium Plots and our Relationship Manager will connect with you shortly. 🏢✨\";\n}\n\n// Fallback logic check to avoid sending raw JSON formatting to the customer\nlet dynamicMessage = ai.whatsapp_message || aiRaw;\nif (dynamicMessage.startsWith('{') && ai.whatsapp_message === \"\") {\n    dynamicMessage = \"Dear Investor, Thank you for your interest in Madhu Nag Premium Plots. Our team is processing your request on priority. 🏢✨\";\n}\n\nreturn [{ \n  json: { \n    ...prevData, \n    finalMessage: dynamicMessage, \n    final_operation: ai.final_operation || \"GENERAL_INQUIRY\", \n    appointment_date: ai.appointment_date || \"\", \n    appointment_time: ai.appointment_time || \"\", \n    budget: ai.budget || \"\", \n    preferredHighway: ai.preferredHighway || \"\", \n    propertyType: ai.propertyType || \"Plot\", \n    leadQuality: ai.lead_quality || \"WARM\",      // Maps perfectly to {{ $json.leadQuality }}\n    lead_quality: ai.lead_quality || \"WARM\",     // Maps perfectly to {{ $json.lead_quality }}\n    shouldSendStr: \"true\" \n  } \n}];\n"
+      },
+      "id": "9616d65d-ca32-4990-b82f-b369ba833812",
+      "name": "VALIDATE_REALESTATE_COPY",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.shouldSendStr }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "dcce1b9c-e5ee-4955-82b8-c920a2dc3ee0"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "52f84d1d-0ad6-46e6-b3d8-6844e0800148",
+      "name": "IF Phone Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        368,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ultramsg.com/instance189322/messages/chat?token=a8nu0g6qynktbm3e&to=+917415655602&body=WhatsApp+API+on+UltraMsg.com+works+good&priority=10",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $vars.ULTRAMSG_TOKEN }}"
+            },
+            {
+              "name": "to",
+              "value": "917049869870"
+            },
+            {
+              "name": "body",
+              "value": "=🚨 *AI CRM: OPERATIONS ALERT* 🚨\n\nHello Team, a new autonomous action has been registered by the AI Sales Engine!\n\n👤 *Investor Name:* {{ $json.customerName }}\n📞 *Contact Number:* {{ $json.customerPhone }}\n💼 *Intent Operation:* {{ $json.final_operation }}\n📅 *Scheduled Date:* {{ $json.appointment_date }}\n⏰ *Scheduled Time:* {{ $json.appointment_time }}\n💰 *Extracted Budget:* {{ $json.budget }}\n📍 *Preferred Corridor:* {{ $json.preferredHighway }}\n🏢 *Property Type:* {{ $json.propertyType }}\n⭐ *AI Lead Profiling:* {{ $json.leadQuality }}\n\nStatus: The AI has updated the CRM and processed the customer response on autopilot! 🚀\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90934885-d50a-4ae8-b50b-b5db4cc76478",
+      "name": "Hot Lead Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        944,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ultramsg.com/instance189322/messages/chat?token=a8nu0g6qynktbm3e&to=+917415655602&body=WhatsApp+API+on+UltraMsg.com+works+good&priority=10",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $vars.ULTRAMSG_TOKEN }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.customerPhone }}"
+            },
+            {
+              "name": "body",
+              "value": "={{ $json.finalMessage }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d05ce654-4884-4742-97b8-d6ecc7b7f4a5",
+      "name": "Customer WhatsApp Sender",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.final_operation }}",
+              "rightValue": "BOOK_VISIT",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "e9bcbe04-ed33-44cf-ad4d-c1d23dddff48"
+            },
+            {
+              "leftValue": "={{ $json.final_operation }}",
+              "rightValue": "RESCHEDULE_VISIT",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "79de5b3b-8313-4fae-9a8c-b736e305cbde"
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "79014486-c177-49e9-b775-f76f443a38d4",
+      "name": "Is Visit Confirmed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        688,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8b6cb730-c8aa-44f5-9732-c00c57a3c729",
+              "leftValue": "={{ $json.isDuplicate }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -480,
+        144
+      ],
+      "id": "5b231259-2220-43ea-bb01-8ff7fd4206bf",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO real_estate_leads (\n    customer_name, \n    customer_phone, \n    raw_message, \n    intent_operation, \n    appointment_date, \n    appointment_time, \n    budget, \n    preferred_highway, \n    property_type, \n    lead_quality,\n    updated_at\n) VALUES (\n    '{{ $json.customerName }}',\n    '{{ $json.customerPhone }}',\n    $${{ $json.rawIncomingMessage }}$$,\n    '{{ $json.final_operation }}',\n    NULLIF('{{ $json.appointment_date }}', '')::DATE,\n    '{{ $json.appointment_time }}',\n    '{{ $json.budget }}',\n    '{{ $json.preferredHighway }}',\n    '{{ $json.propertyType }}',\n    '{{ $json.leadQuality }}',\n    NOW()\n);\n",
+        "options": {
+          "queryReplacement": "=Parameter 1: {{ $json.customerName }}\nParameter 2: {{ $json.customerPhone }}\nParameter 3: {{ $json.rawIncomingMessage }}\nParameter 4: {{ $json.final_operation }}\nParameter 5: {{ $json.appointment_date }}\nParameter 6: {{ $json.appointment_time }}\nParameter 7: {{ $json.budget }}\nParameter 8: {{ $json.preferredHighway }}\nParameter 9: {{ $json.propertyType }}\nParameter 10: {{ $json.leadQuality }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        672,
+        -64
+      ],
+      "id": "fcebeb5a-a4fc-4aed-ba31-246b74111a39",
+      "name": "Postgres CRM Logger",
+      "alwaysOutputData": false,
+      "credentials": {
+        "postgres": {
+          "id": "K1t23p6wdT1yCyGf",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM real_estate_leads \nWHERE customer_phone = '{{ $json.customerPhone }}' \nAND created_at >= NOW() - INTERVAL '10 seconds';\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -944,
+        144
+      ],
+      "id": "685e0783-4bf6-45b8-9fbf-b50fafe81783",
+      "name": "Postgres Check",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "K1t23p6wdT1yCyGf",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean & Secure Database Memory Verification Script\nconst lead = $('NORMALIZE_REALESTATE_LEAD').first().json;\nconst dbInput = $input.all();\n\nlet isDuplicateMessage = false;\n\n// Check if database actually returned a valid record row\nif (dbInput && dbInput.length > 0) {\n    const firstRow = dbInput[0].json || dbInput[0];\n    \n    // Check if the object contains a valid customer_phone\n    if (firstRow && firstRow.customer_phone && String(firstRow.customer_phone).trim() !== \"\") {\n        isDuplicateMessage = true;\n    }\n}\n\nreturn [{ \n  json: { \n    customerName: lead.customerName, \n    customerPhone: lead.customerPhone, \n    rawIncomingMessage: lead.rawIncomingMessage, \n    leadTimestamp: lead.leadTimestamp,\n    isDuplicate: isDuplicateMessage\n  } \n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        144
+      ],
+      "id": "4d20a25c-606d-4f39-aee1-4ce8bff8056c",
+      "name": "COMPUTE_DUPLICATE_GUARD"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Lead Source Trigger": {
+      "main": [
+        [
+          {
+            "node": "NORMALIZE_REALESTATE_LEAD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NORMALIZE_REALESTATE_LEAD": {
+      "main": [
+        [
+          {
+            "node": "Postgres Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI_INVESTOR_PROFILER": {
+      "main": [
+        [
+          {
+            "node": "VALIDATE_REALESTATE_COPY",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VALIDATE_REALESTATE_COPY": {
+      "main": [
+        [
+          {
+            "node": "IF Phone Valid?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres CRM Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Phone Valid?": {
+      "main": [
+        [
+          {
+            "node": "Customer WhatsApp Sender",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Visit Confirmed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Model Config": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI_INVESTOR_PROFILER",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Visit Confirmed?": {
+      "main": [
+        [
+          {
+            "node": "Hot Lead Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "AI_INVESTOR_PROFILER",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Check": {
+      "main": [
+        [
+          {
+            "node": "COMPUTE_DUPLICATE_GUARD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "COMPUTE_DUPLICATE_GUARD": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9c2bad7d-58f4-42ef-822d-357b2406231a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "514590788f5872c00d3fe858cf233715b6aa1a0261bbe5c134ec6df4db37b2ec"
+  },
+  "nodeGroups": [],
+  "id": "juPVcIl7NFIo7D0q",
+  "tags": []
+}

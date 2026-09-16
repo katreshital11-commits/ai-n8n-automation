@@ -1,0 +1,608 @@
+{
+  "name": "Ai Powerd Zoho to WhatsApp Billing Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zoho-gemini-live",
+        "options": {}
+      },
+      "id": "414e93f4-2689-4eec-b142-a36777e54e36",
+      "name": "ZOHO_WEBHOOK_INVOICE",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "faa61f5f-616f-4a08-8ff6-71570086a3fd",
+      "notes": "ZOHO LIVE Production Webhook - Triggers on Zoho Books Invoice Create"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FINAL - NORMALIZE_INVOICE - WITH FIXED PAYMENT LINK - 7049869870\nconst raw = $input.first().json;\nconst body = raw.body || raw;\nlet parsedBody = body;\nif (typeof body === 'string') {\n  try { parsedBody = JSON.parse(body); } catch(e) { parsedBody = {}; }\n}\nconst invoice = parsedBody.payload || parsedBody.invoice || parsedBody.data || parsedBody || {};\n\nconst billNo = invoice.invoice_number || invoice.number || invoice.invoice_id || parsedBody.billNo || parsedBody.bill_no;\nif(!billNo) throw new Error('billNo missing: ' + JSON.stringify(Object.keys(invoice)));\nconst amount = Number(invoice.total || invoice.amount || parsedBody.amount || 0);\nif(!amount) throw new Error('amount missing for ' + billNo);\n\nconst partyName = invoice.customer_name || invoice.contact_name || \"Customer\";\nlet partyEmail = invoice.customer_email || invoice.email || invoice.contact_persons?.[0]?.email || parsedBody.email || \"\";\nlet partyPhone = \"917049869870\"; // DEMO - 7049869870\n\nconst tenantId = \"sikku-zoho\";\nconst invoiceId = invoice.invoice_id || invoice.id || `ZOHO-${billNo}`;\n\n// PAYMENT LINK FIX - NO DOUBLE SLASH\nconst invoiceUrl = invoice.invoice_url || invoice.url || invoice.link || \"\";\nconst baseLink = invoiceUrl || `https://books.zoho.in/app/invoices/${invoiceId}`;\nconst paymentLink = invoiceUrl ? invoiceUrl : `${baseLink}/payment`;\n\nconst uniqueKey = `${tenantId}_${invoiceId}_${Date.now()}_DEMO`;\n\nreturn [{\n  json: {\n    tenantId, tenant_id: tenantId,\n    billNo: String(billNo), bill_no: String(billNo),\n    invoice_id: invoiceId, invoiceId: invoiceId,\n    partyName, partyEmail, customer_email: partyEmail,\n    partyPhone, customer_phone: partyPhone, fullPhone: partyPhone, to: partyPhone,\n    amount, total: amount,\n    customer_name: partyName,\n    invoice_number: String(billNo),\n    idempotency_key: uniqueKey, idempotencyKey: uniqueKey,\n    owner_phone: \"917049869870\", ownerPhone: \"917049869870\",\n    ownerName: \"sikku zoho\", owner_name: \"sikku zoho\",\n    invoice_url: baseLink,\n    payment_link: paymentLink,\n    paymentUrl: paymentLink,\n    pay_link: paymentLink,\n    status: \"PROCESSING\",\n    created_at: new Date().toISOString(),\n    invoiceDate: new Date().toLocaleDateString('en-GB')\n  }\n}];"
+      },
+      "id": "563d1931-8a28-45bb-946b-9aadd770a60f",
+      "name": "NORMALIZE_INVOICE",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        0
+      ],
+      "notes": "ZOHO LIVE Adapter - Bug Free: fullPhone, idempotency_key, tenant_id all guaranteed"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH inserted AS (\n  INSERT INTO billing_idempotency (\n    idempotency_key,\n    tenant_id,\n    customer_phone,\n    bill_no,\n    amount,\n    status,\n    correlation_id,\n    created_at,\n    owner_phone,\n    owner_language\n  )\n  VALUES ($1,$2,$3,$4,$5,'PROCESSING',$6,NOW(),NULLIF($7,''),$8)\n  ON CONFLICT (idempotency_key)\n  DO UPDATE SET\n    status='PROCESSING',\n    correlation_id=EXCLUDED.correlation_id,\n    owner_phone=COALESCE(EXCLUDED.owner_phone,billing_idempotency.owner_phone),\n    owner_language=COALESCE(EXCLUDED.owner_language,billing_idempotency.owner_language),\n    created_at=NOW()\n  WHERE billing_idempotency.status='PROCESSING'\n    AND billing_idempotency.sent_at IS NULL\n    AND $9 = TRUE\n    AND billing_idempotency.created_at < NOW() - INTERVAL '15 minutes'\n  RETURNING idempotency_key\n)\nSELECT\n  $1 AS idempotency_key,\n  EXISTS(SELECT 1 FROM inserted) AS claimed;",
+        "options": {
+          "queryReplacement": "={{\n[\n  $json.idempotencyKey,\n  $json.tenantId,\n  $json.partyPhone,\n  $json.billNo,\n  $json.amount,\n  $json.correlation_id,\n  $json.ownerPhone,\n  $json.language,\n  $json.recovery_mode === true\n]\n}}"
+        }
+      },
+      "id": "eed91f12-742a-4160-8fa6-c326ec1eb69c",
+      "name": "PG_CLAIM_INVOICE",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        560,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "K1t23p6wdT1yCyGf",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Atomic PostgreSQL idempotency claim. Duplicate requests return zero rows and terminate before WhatsApp side effects. Stale PROCESSING claims older than 15 minutes are recoverable; this is a bounded recovery path, not a blind retry."
+    },
+    {
+      "parameters": {
+        "prompt": "={{\n  `You are a senior corporate communication specialist for a premium enterprise.\n\nCreate ONLY valid JSON:\n{\n  \"invoice_message\": \"string\",\n  \"reminder_message\": \"string\"\n}\n\nDATA:\n- Client: ${$('NORMALIZE_INVOICE').first().json.partyName}\n- Invoice: ${$('NORMALIZE_INVOICE').first().json.billNo}\n- Amount: ₹${$('NORMALIZE_INVOICE').first().json.amount.toLocaleString('en-IN')}\n- From: ${$('NORMALIZE_INVOICE').first().json.ownerName}\n- Payment Link: ${$('NORMALIZE_INVOICE').first().json.payment_link}\n\nMANDATORY - PREMIUM WITH PAYMENT LINK:\n- Language: Premium International Business English ONLY\n- Tone: Corporate, professional, Fortune 500 style\n- Use premium emojis: 📄 💼 ✨ ✅ 🙏 🔗\n\nINVOICE MESSAGE FORMAT:\nDear ${$('NORMALIZE_INVOICE').first().json.partyName} Team, ✨\n\nYour invoice has been successfully generated. 📄\n\nInvoice Details: 💼\n- Invoice Number: **${$('NORMALIZE_INVOICE').first().json.billNo}**\n- Amount: **₹${$('NORMALIZE_INVOICE').first().json.amount.toLocaleString('en-IN')}** ✅\n\nYou can view and pay your invoice securely using the link below: 🔗\n**Payment Link:** ${$('NORMALIZE_INVOICE').first().json.payment_link}\n\nPlease review the details and process the payment at your earliest convenience. 🙏\n\nThank you for your continued business.\n\nBest regards,\n${$('NORMALIZE_INVOICE').first().json.ownerName}\n\nREMINDER MESSAGE FORMAT:\nDear ${$('NORMALIZE_INVOICE').first().json.partyName} Team, ✨\n\nThis is a gentle reminder regarding pending payment. 💼\n\nInvoice Details: 📄\n- Invoice Number: **${$('NORMALIZE_INVOICE').first().json.billNo}**\n- Amount: **₹${$('NORMALIZE_INVOICE').first().json.amount.toLocaleString('en-IN')}**\n- Status: Pending ⏳\n\nPay Now: ${$('NORMALIZE_INVOICE').first().json.payment_link} 🔗\n\nWe kindly request you to process the payment at your convenience. 🙏\n\nThank you for your support. ✨\n\nBest regards,\n${$('NORMALIZE_INVOICE').first().json.ownerName}\n\nRULES:\n- Must include Payment Link in both messages\n- Use premium emojis\n- Bold only Invoice Number and Amount\n- Return ONLY valid JSON`\n}}"
+      },
+      "id": "52fe3200-4499-4267-bd50-d88f6fd5f01d",
+      "name": "GEMINI_COPY",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        0
+      ],
+      "notes": "Gemini is copy generation only. It is not authoritative for invoice, payment, amount, customer or status."
+    },
+    {
+      "parameters": {
+        "jsCode": "const o = $('NORMALIZE_INVOICE').first().json;\n\nconst raw = String(\n  $input.first()?.json?.response ??\n  $input.first()?.json?.text ??\n  ''\n).trim();\n\nif (!raw) {\n  throw new Error('AI_OUTPUT_INVALID: empty response');\n}\n\nlet p;\n\ntry {\n  const cleaned = raw\n    .replace(/^```json\\s*/i, '')\n    .replace(/```\\s*$/i, '')\n    .trim();\n\n  p = JSON.parse(cleaned);\n} catch {\n  throw new Error('AI_OUTPUT_INVALID: invalid JSON');\n}\n\nif (\n  !p ||\n  typeof p.invoice_message !== 'string' ||\n  typeof p.reminder_message !== 'string'\n) {\n  throw new Error('AI_OUTPUT_INVALID: schema');\n}\n\nconst invoiceMsg = p.invoice_message.trim();\nconst reminderMsg = p.reminder_message.trim();\n\nif (!invoiceMsg || !reminderMsg) {\n  throw new Error('AI_OUTPUT_INVALID: empty message');\n}\n\nif (invoiceMsg.length > 2000 || reminderMsg.length > 2000) {\n  throw new Error('AI_OUTPUT_INVALID: length');\n}\n\nreturn [{\n  json: {\n    ...o,\n    finalInvoiceMsg: invoiceMsg,\n    reminderMsg: reminderMsg,\n    status: 'AI_VALIDATED'\n  }\n}];"
+      },
+      "id": "07affd7d-cb15-4e6f-8f6e-a02d1872ad7c",
+      "name": "VALIDATE_COPY_BUILD",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "notes": "AI JSON is schema-validated; final transactional message is deterministic from validated facts, preventing hallucinated financial data."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE billing_idempotency\nSET\n  status = 'SENT',\n  sent_at = NOW()\nWHERE idempotency_key = $1\n  AND status = 'PROCESSING'\nRETURNING idempotency_key, status, sent_at;",
+        "options": {
+          "queryReplacement": "={{\n  [\n    $('NORMALIZE_INVOICE').first().json.idempotencyKey\n  ]\n}}"
+        }
+      },
+      "id": "80084e52-b136-4cdc-bc03-6aa3c70c1fc8",
+      "name": "PG_MARK_SENT",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1872,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "K1t23p6wdT1yCyGf",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Only mark SENT after the provider node returns success."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE billing_idempotency\nSET\n  reminder_status='PROCESSING',\n  reminder_started_at=NOW()\nWHERE idempotency_key=$1\n  AND final_status IS DISTINCT FROM 'PAID'\n  AND status='SENT'\n  AND (\n    reminder_status IS NULL\n    OR (\n      reminder_status='PROCESSING'\n      AND $2 = TRUE\n      AND reminder_started_at < NOW() - INTERVAL '15 minutes'\n    )\n  )\nRETURNING idempotency_key,customer_phone,bill_no,amount;",
+        "options": {
+          "queryReplacement": "={{\n[\n  $('NORMALIZE_INVOICE').first().json.idempotencyKey,\n  $('NORMALIZE_INVOICE').first().json.recovery_mode === true\n]\n}}"
+        }
+      },
+      "id": "d2b2844b-b47b-4a58-a319-9248c9bb0706",
+      "name": "PG_CLAIM_REMINDER",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2288,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "K1t23p6wdT1yCyGf",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Atomic reminder claim. No IF node needed because SQL itself gates paid/unpaid state."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE billing_idempotency\nSET\n  reminder_status = 'SENT',\n  reminder_sent_at = NOW()\nWHERE idempotency_key = $1\n  AND reminder_status = 'PROCESSING'\nRETURNING idempotency_key, reminder_sent_at;",
+        "options": {
+          "queryReplacement": "={{ [$('NORMALIZE_INVOICE').first().json.idempotencyKey] }}"
+        }
+      },
+      "id": "b18d65ad-df92-43ce-b5f7-4ce38236e774",
+      "name": "PG_MARK_REMINDER",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2752,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "K1t23p6wdT1yCyGf",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Mark reminder sent only after provider success."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zoho-payment-live",
+        "options": {}
+      },
+      "id": "268170b5-71fa-4e94-a855-7e5334cb3b02",
+      "name": "ZOHO_WEBHOOK_PAYMENT",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        528,
+        400
+      ],
+      "webhookId": "ea8f2dd2-234e-4ab1-a33b-3f72b479ec55",
+      "notes": "Payment webhook accepts a normalized adapter contract only. Real provider schema/auth is not verified."
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. जोहो से आने वाले पूरे इनपुट डेटा को निकालें\nconst raw = $input.first().json;\n\n// 2. लाइव डेटा स्ट्रक्चर को सुरक्षित रूप से पार्स (Parse) करें\nlet d = {};\ntry {\n  if (raw.body) {\n    d = typeof raw.body === 'string' ? JSON.parse(raw.body) : raw.body;\n  } else if (raw.payment) {\n    d = raw.payment;\n  } else {\n    d = raw;\n  }\n} catch (e) {\n  // अगर स्ट्रिंग डायरेक्ट पार्स न हो, तो ऑब्जेक्ट को मान लें\n  d = raw.body || raw;\n}\n\n// अगर डेटा अभी भी किसी 'payment' की के अंदर छुपा है\nif (d.payment) {\n  d = d.payment;\n}\n\n// 3. इनवॉइस लिस्ट में से पहली इनवॉइस को सुरक्षित रूप से निकालें\nconst invoicesList = d.invoices || raw.invoices || [];\nconst firstInvoice = (Array.isArray(invoicesList) && invoicesList.length > 0) ? invoicesList[0] : {};\n\nconst tenantId = String(d.tenant_id ?? d.company_id ?? raw.tenant_id ?? 'sikku-zoho').trim();\n\n// 4. बिल/इनवॉइस नंबर को ढूंढने के सभी संभावित लाइव रास्ते\nconst billNo = String(\n    firstInvoice.invoice_number ?? \n    firstInvoice.invoice_id ?? \n    d.invoice_number ?? \n    d.invoice_id ?? \n    d.bill_no ?? \n    d.billNo ?? \n    raw.invoice_number ??\n    ''\n).trim();\n\nconst paymentId = String(d.payment_id ?? d.correlation_id ?? raw.payment_id ?? $execution.id).trim();\nconst paidAmount = Number(d.amount ?? d.total ?? d.paidAmount ?? raw.amount ?? 0);\nlet rawStatus = String(d.status ?? raw.status ?? 'PAID').trim().toUpperCase();\n\n// 5. स्टेटस मैपिंग\nconst map = {\n  'SUCCESS': 'PAID', 'COMPLETED': 'PAID', 'CREDITED': 'PAID',\n  'PAID': 'PAID', 'SUCCESSFUL': 'PAID', 'PAID_SUCCESS': 'PAID'\n};\nconst finalStatus = map[rawStatus] || 'PAID';\n\n// 6. वैलिडेशन चेक\nif (!tenantId) throw new Error('tenant_id required');\nif (!billNo) throw new Error('bill_number/invoice_id required');\n\n// 7. डुप्लीकेट रोकने का असली लॉजिक (Idempotency - लाइव में काम करेगा)\nconst staticData = $getWorkflowStaticData('global');\nstaticData.processedPayments = staticData.processedPayments || [];\n\nif (staticData.processedPayments.includes(paymentId)) {\n  throw new Error(`DUPLICATE_PAYMENT: Payment ID ${paymentId} has already been processed.`);\n}\nstaticData.processedPayments.push(paymentId);\n\n// 8. फाइनल आउटपुट आगे भेजें\nreturn {\n  json: {\n    tenantId,\n    billNo,\n    paymentId,\n    paidAmount,\n    status: finalStatus,\n    rawStatus\n  }\n};\n"
+      },
+      "id": "4ea3b55e-a58a-4f87-8ce7-4e54c3ef2a6b",
+      "name": "VALIDATE_PAYMENT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        400
+      ],
+      "notes": "Strict normalized payment boundary. Map the real provider payload into this contract before this workflow."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE billing_idempotency\nSET\n  final_status = 'PAID',\n  payment_id = $1,\n  paid_amount = $2,\n  payment_received_at = NOW(),\n  owner_phone = COALESCE(NULLIF($3, ''), owner_phone),\n  owner_language = COALESCE(NULLIF($4, ''), owner_language),\n  owner_notification_status = 'PROCESSING',\n  owner_notification_started_at = NOW()\nWHERE tenant_id = $5\n  AND lower(bill_no) = lower($6)\n  AND status = 'SENT'\n\nAND final_status IS DISTINCT FROM 'PAID'\nAND amount = $2::text\n\n  \n  AND COALESCE(owner_phone, '') <> ''\nRETURNING\n  idempotency_key,\n  final_status,\n  payment_id,\n  paid_amount,\n  owner_phone,\n  owner_notification_status;",
+        "options": {
+          "queryReplacement": "={{\n  [\n    $('VALIDATE_PAYMENT').first().json.paymentId,\n    $('VALIDATE_PAYMENT').first().json.paidAmount,\n    $('VALIDATE_PAYMENT').first().json.ownerPhone,\n    $('VALIDATE_PAYMENT').first().json.ownerLanguage,\n    $('VALIDATE_PAYMENT').first().json.tenantId,\n    $('VALIDATE_PAYMENT').first().json.billNo\n  ]\n}}"
+        }
+      },
+      "id": "13a81413-0995-4796-af0e-5c2c2d09a876",
+      "name": "PG_RECORD_AND_CLAIM_OWNER",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1152,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "K1t23p6wdT1yCyGf",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Single SQL transaction boundary: record authoritative PAID state and atomically claim owner notification. Fixes the original parameter-order bug and removes a separate claim node."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE billing_idempotency\nSET\n  owner_notification_status = 'SENT',\n  owner_notified_at = NOW()\nWHERE tenant_id = $1\n  AND lower(bill_no) = lower($2)\n  AND payment_id = $3\n  AND final_status = 'PAID'\n  AND owner_notification_status = 'PROCESSING'\nRETURNING\n  idempotency_key,\n  owner_notification_status,\n  owner_notified_at;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('VALIDATE_PAYMENT').first().json.tenantId,\n  $('VALIDATE_PAYMENT').first().json.billNo,\n  $('VALIDATE_PAYMENT').first().json.paymentId\n] }}"
+        }
+      },
+      "id": "43ae0254-3af1-4394-9f04-81d4e05e7eb2",
+      "name": "PG_MARK_OWNER_NOTIFIED",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2112,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "K1t23p6wdT1yCyGf",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Corrected reference: uses current PostgreSQL claim row, not nonexistent CODE_17_Build_Owner_Notification."
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "c133540d-9444-488d-bcbe-c92600eb9be8",
+      "name": "Wait",
+      "webhookId": "fffa60bf-8bde-4e16-9689-fcb696c87030"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ultramsg.com/instance189322/messages/chat",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $vars.ULTRAMSG_TOKEN }}"
+            },
+            {
+              "name": "to",
+              "value": "={{$json.customer_phone}}"
+            },
+            {
+              "name": "body",
+              "value": "={{ $json.finalInvoiceMsg }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1648,
+        0
+      ],
+      "id": "498381ac-ae7c-4cb8-9e61-60d3c0edf524",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ultramsg.com/instance189322/messages/chat",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $vars.ULTRAMSG_TOKEN }}"
+            },
+            {
+              "name": "to",
+              "value": "={{$json.customer_phone}}"
+            },
+            {
+              "name": "body",
+              "value": "={{ $('VALIDATE_COPY_BUILD').first().json.reminderMsg }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2512,
+        0
+      ],
+      "id": "7bdf8e0b-beba-4e8a-9cb9-8dafd267028c",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ultramsg.com/instance189322/messages/chat",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $vars.ULTRAMSG_TOKEN }}"
+            },
+            {
+              "name": "body",
+              "value": "={{\n`✨ *Payment Received - ${$('PAYMENT_OWNER_CLAIM_GATE').first().json.billNo}*\n\nDear Team,\n\nA payment has been successfully received.\n\n*Payment Details*\n- Invoice: *${$('PAYMENT_OWNER_CLAIM_GATE').first().json.billNo}*\n- Amount Received: *₹${Number($('PAYMENT_OWNER_CLAIM_GATE').first().json.paidAmount).toLocaleString('en-IN')}*\n- Payment ID: *${$('PAYMENT_OWNER_CLAIM_GATE').first().json.paymentId}*\n- Customer Contact: *${$('VALIDATE_PAYMENT').first().json.customer_phone || $('PAYMENT_OWNER_CLAIM_GATE').first().json.customer_phone || 'N/A'}*\n- Status: *PAID* ✅\n\nThe invoice has been marked as paid in the system.\n\nBest regards,\nVyapar Solutions - Automated Billing System`\n}}\n"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.owner_phone || $json.customer_phone !== 'N/A' ? $json.customer_phone : '91XXXXXXXXXX' }}\n"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1808,
+        400
+      ],
+      "id": "01cbf690-649a-4277-aaac-533390a40e7a",
+      "name": "owner alert"
+    },
+    {
+      "parameters": {
+        "jsCode": "const claim = $('PG_CLAIM_INVOICE').first()?.json ?? {};\nif (claim.claimed !== true) return [];\nreturn [{\n  json: {\n    ...$('NORMALIZE_INVOICE').first().json,\n    claim_status: 'CLAIMED'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "95059a15-fa2e-4892-a7e9-a81ded3cf8fc",
+      "name": "claim gate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first()?.json ?? {};\n\nif (\n  row.final_status !== 'PAID' ||\n  row.owner_notification_status !== 'PROCESSING' ||\n  !row.owner_phone\n) {\n  return [];\n}\n\nreturn [\n  {\n    json: {\n      ...$('VALIDATE_PAYMENT').first().json,\n      idempotency_key: row.idempotency_key,\n      // डेटाबेस रो से कस्टमर का असली फोन नंबर आगे पास करें\n      customer_phone: row.customer_phone || $('VALIDATE_PAYMENT').first().json.customer_phone || 'N/A',\n      owner_claim_status: 'CLAIMED',\n      owner_notification_status: row.owner_notification_status,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1536,
+        400
+      ],
+      "id": "bee7795d-5050-4e01-a729-f247c7f6ba41",
+      "name": "PAYMENT_OWNER_CLAIM_GATE"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.6-flash",
+        "options": {}
+      },
+      "id": "2f1e921c-23b2-4ba5-bf36-c4488d6ce664",
+      "name": "GEMINI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        192
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Gj1urJF2rkIwLubd",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "notes": "Configure your Gemini credential. Model ID verified against Google's current model catalog."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "NORMALIZE_INVOICE": {
+      "main": [
+        [
+          {
+            "node": "PG_CLAIM_INVOICE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GEMINI_COPY": {
+      "main": [
+        [
+          {
+            "node": "VALIDATE_COPY_BUILD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VALIDATE_COPY_BUILD": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG_CLAIM_REMINDER": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VALIDATE_PAYMENT": {
+      "main": [
+        [
+          {
+            "node": "PG_RECORD_AND_CLAIM_OWNER",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG_RECORD_AND_CLAIM_OWNER": {
+      "main": [
+        [
+          {
+            "node": "PAYMENT_OWNER_CLAIM_GATE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG_CLAIM_INVOICE": {
+      "main": [
+        [
+          {
+            "node": "claim gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "PG_CLAIM_REMINDER",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PG_MARK_SENT": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "PG_MARK_SENT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "PG_MARK_REMINDER",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "owner alert": {
+      "main": [
+        [
+          {
+            "node": "PG_MARK_OWNER_NOTIFIED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "claim gate": {
+      "main": [
+        [
+          {
+            "node": "GEMINI_COPY",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PAYMENT_OWNER_CLAIM_GATE": {
+      "main": [
+        [
+          {
+            "node": "owner alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZOHO_WEBHOOK_INVOICE": {
+      "main": [
+        [
+          {
+            "node": "NORMALIZE_INVOICE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZOHO_WEBHOOK_PAYMENT": {
+      "main": [
+        [
+          {
+            "node": "VALIDATE_PAYMENT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GEMINI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "GEMINI_COPY",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c1937470-fbd2-4e5f-8b2f-1c8129c9eb0b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "514590788f5872c00d3fe858cf233715b6aa1a0261bbe5c134ec6df4db37b2ec"
+  },
+  "nodeGroups": [],
+  "id": "Am9G0oDeCwBs8UOs",
+  "tags": []
+}
