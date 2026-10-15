@@ -1,0 +1,189 @@
+{
+ "name": "FREE · WhatsApp Auto-Reply Bot",
+ "nodes": [
+  {
+   "id": "9b385dfe-fa67-4c2c-83df-e3e02c0ff796",
+   "name": "Verify",
+   "type": "n8n-nodes-base.webhook",
+   "position": [
+    700,
+    180
+   ],
+   "webhookId": "793f285b-9da7-4a5e-97ce-f0976c113db5",
+   "parameters": {
+    "path": "1fea1f5f-81c0-48ad-ae13-41e0f8e474ed",
+    "options": {},
+    "responseMode": "responseNode"
+   },
+   "typeVersion": 1.1
+  },
+  {
+   "id": "676efc61-c875-4675-a843-20f98ef1a642",
+   "name": "Respond to Webhook",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "position": [
+    920,
+    180
+   ],
+   "parameters": {
+    "options": {},
+    "respondWith": "text",
+    "responseBody": "={{ \$json.query['hub.challenge'] }}"
+   },
+   "typeVersion": 1
+  },
+  {
+   "id": "8dd6d094-415c-40d7-ad2b-4ed9f2d23232",
+   "name": "Send Auto-Reply",
+   "type": "n8n-nodes-base.whatsApp",
+   "position": [
+    1140,
+    540
+   ],
+   "parameters": {
+    "textBody": "={{ \$json.reply }}",
+    "operation": "send",
+    "phoneNumberId": "244242975437240",
+    "additionalFields": {},
+    "recipientPhoneNumber": "={{ \$json.to }}"
+   },
+   "credentials": {
+    "whatsAppApi": {
+     "id": "dy22WXWn0Xz4WRby",
+     "name": "WhatsApp account"
+    }
+   },
+   "typeVersion": 1
+  },
+  {
+   "id": "cd9e2cfd-9589-4390-95fd-f0bc3960d60c",
+   "name": "Is message?",
+   "type": "n8n-nodes-base.if",
+   "position": [
+    920,
+    540
+   ],
+   "parameters": {
+    "options": {
+     "looseTypeValidation": true
+    },
+    "conditions": {
+     "options": {
+      "leftValue": "",
+      "caseSensitive": true,
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "id": "8a765e57-8e39-4547-a99a-0458df2b75f4",
+       "operator": {
+        "type": "object",
+        "operation": "exists",
+        "singleValue": true
+       },
+       "leftValue": "={{ \$json.body.entry[0].changes[0].value.messages[0] }}",
+       "rightValue": ""
+      }
+     ]
+    }
+   },
+   "typeVersion": 2
+  },
+  {
+   "id": "2370b81a-0721-42fd-8893-e3ee02e20278",
+   "name": "Respond",
+   "type": "n8n-nodes-base.webhook",
+   "position": [
+    700,
+    540
+   ],
+   "webhookId": "c4cbc1c4-e1f5-4ea5-bd9a-c5f697493985",
+   "parameters": {
+    "path": "1fea1f5f-81c0-48ad-ae13-41e0f8e474ed",
+    "options": {},
+    "httpMethod": "POST"
+   },
+   "typeVersion": 1.1
+  },
+  {
+   "parameters": {
+    "jsCode": "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n//  EDIT THESE TWO THINGS\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\nconst BUSINESS = 'Your Business Name';\n\n// Each rule: if the customer's message matches `when`, we send `reply`.\n// Add as many as you like. Order matters - first match wins.\nconst RULES = [\n  { when: /price|cost|how much|rate/i,     reply: 'Here is our price list: <paste your link>. Anything specific you want quoted?' },\n  { when: /hours|open|close|timing/i,      reply: 'We are open Sunday to Thursday, 9am to 6pm.' },\n  { when: /location|where|address|map/i,   reply: 'Here is our location: <paste your Google Maps link>.' },\n  { when: /deliver|shipping|how long/i,    reply: 'Delivery takes 2 to 3 working days. Free over a certain order value.' },\n  { when: /human|agent|call me|speak/i,    reply: 'Got it - a human will get back to you shortly.' }\n];\n\n// Used when nothing matches.\nconst FALLBACK = 'Thanks for your message! We will get back to you shortly.';\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nconst msg  = \$json.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];\nconst text = (msg?.text?.body || '').trim();\n\nconst hit = RULES.find(r => r.when.test(text));\n\nreturn [{ json: {\n  to:       msg?.from,\n  reply:    hit ? hit.reply : FALLBACK,\n  matched:  hit ? String(hit.when) : 'fallback',\n  incoming: text,\n  business: BUSINESS\n}}];"
+   },
+   "id": "d5253b11-7bcd-4383-885c-8ebc05591bb1",
+   "name": "Pick the Reply",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    0,
+    -130
+   ]
+  },
+  {
+   "parameters": {
+    "content": "## FREE · WhatsApp Auto-Reply Bot\n**by Maui Tech Hub** — free to use, modify and resell. No attribution required.\n\nTurns your WhatsApp Business number into a bot that answers the 5 questions\nyou get asked every single day.\n\n**Set it up in 4 steps**\n1. Create a Meta WhatsApp Cloud app (free tier) and get your\n   Phone Number ID + permanent access token.\n2. In n8n: Credentials -> WhatsApp -> add the token.\n3. Open **Send Auto-Reply** and paste your Phone Number ID.\n4. Point Meta's webhook at this workflow's two URLs (Verification + Messages).\n\n**Then edit the RULES** in \"Pick the Reply\" with your own answers.\nThat is the whole bot: message comes in, keyword matches, answer goes out.\n\nQuestions? mauitechhub.com",
+    "height": 380,
+    "width": 1000,
+    "color": 4
+   },
+   "id": "3ca26e8a-bfaf-41e0-8eab-452e712c81df",
+   "name": "About this workflow",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "position": [
+    -300,
+    -550
+   ]
+  }
+ ],
+ "connections": {
+  "Verify": {
+   "main": [
+    [
+     {
+      "node": "Respond to Webhook",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Respond": {
+   "main": [
+    [
+     {
+      "node": "Is message?",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Is message?": {
+   "main": [
+    [
+     {
+      "node": "Pick the Reply",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Pick the Reply": {
+   "main": [
+    [
+     {
+      "node": "Send Auto-Reply",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "active": false
+}
