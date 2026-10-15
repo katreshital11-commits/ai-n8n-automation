@@ -1,0 +1,331 @@
+{
+  "id": "k9abwUyVzl7OCsAl",
+  "meta": {
+    "instanceId": "fb8bc2e315f7f03c97140b30aa454a27bc7883a19000fa1da6e6b571bf56ad6d"
+  },
+  "name": "Realtime Notion Todoist 2-way Sync Template",
+  "tags": [
+    {
+      "id": "RKga6I6NviNI12bx",
+      "name": "template",
+      "createdAt": "2024-09-19T19:09:21.997Z",
+      "updatedAt": "2024-09-19T19:09:21.997Z"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "5e0488a3-270d-46b3-8b4b-f4ee459a3016",
+      "name": "Get projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -700,
+        260
+      ],
+      "parameters": {
+        "url": "https://todoist.com",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "todoistApi"
+      },
+      "credentials": {
+        "todoistApi": {
+          "id": "Dp3VoWGH5IhrK22k",
+          "name": "Todoist (mario.haarmann)"
+        }
+      },
+      "typeVersion": 4.2
+    },
+    {
+      "id": "e52b0a6d-4697-4c42-91c9-6c786752877c",
+      "name": "Get sections",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        180,
+        260
+      ],
+      "parameters": {
+        "url": "https://todoist.com",
+        "options": {},
+        "sendQuery": true,
+        "authentication": "predefinedCredentialType",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "project_id",
+              "value": "={{ $json.project_id }}"
+            }
+          ]
+        },
+        "nodeCredentialType": "todoistApi"
+      },
+      "credentials": {
+        "todoistApi": {
+          "id": "Dp3VoWGH5IhrK22k",
+          "name": "Todoist (mario.haarmann)"
+        }
+      },
+      "typeVersion": 4.2
+    },
+    {
+      "id": "8af0c04f-a46e-4fb8-ab5a-09952a3c1360",
+      "name": "Get Notion Databases",
+      "type": "n8n-nodes-base.notion",
+      "position": [
+        -1580,
+        260
+      ],
+      "parameters": {
+        "resource": "database",
+        "operation": "getAll"
+      },
+      "credentials": {
+        "notionApi": {
+          "id": "ObmaBA0dJss3JJPv",
+          "name": "Notion (Test)"
+        }
+      },
+      "typeVersion": 2.2
+    },
+    {
+      "id": "09e43e00-6df6-4844-bda3-f5e8be0aed3a",
+      "name": "Prep Dropdown",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1360,
+        260
+      ],
+      "parameters": {
+        "jsCode": "let dropDownValues = [];\n\nfor (const item of $input.all()) {\n  if (item.json.name == \"Inbox\") continue;\n  dropDownValues.push({\"option\": item.json.name});\n}\n\nreturn { \"options\": JSON.stringify(dropDownValues) };"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "426872eb-228a-4b1c-b992-cf17893d29d2",
+      "name": "Prep Dropdown1",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -480,
+        260
+      ],
+      "parameters": {
+        "jsCode": "let dropDownValues = [];\n\nfor (const item of $input.all()) {\n  if (item.json.name == \"Inbox\") continue;\n  dropDownValues.push({\"option\": item.json.name});\n}\n\nreturn { \"options\": JSON.stringify(dropDownValues) };"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "bebc6443-6187-4b97-82ff-45b6ce75cd7e",
+      "name": "Generate config",
+      "type": "n8n-nodes-base.crypto",
+      "position": [
+        400,
+        260
+      ],
+      "parameters": {
+        "jsCode": "let sections = [];\nfor (const item of $('Get sections').all()) {\n  sections.push({ id: item.json.id, name: item.json.name }); \n}\n\nreturn { json: \n{\n  \"database_id\": $('Get Notion Database ID').first().json.database_id,\n  \"project_id\": $('Get Todoist Project ID').first().json.project_id,\n  \"sections\": sections\n}  \n};"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "52692c9c-a490-4c2c-8df4-93870bf52ded",
+      "name": "Choose Notion Database",
+      "type": "n8n-nodes-base.form",
+      "position": [
+        -1140,
+        260
+      ],
+      "webhookId": "971affb1-c55c-4025-9b4b-743c8f3fcfcf",
+      "parameters": {
+        "options": {
+          "buttonLabel": "Continue"
+        },
+        "defineForm": "json",
+        "jsonOutput": "=[\n   {\n      \"fieldLabel\": \"Select Notion Database\",\n      \"fieldType\": \"dropdown\",\n      \"requiredField\": true,\n      \"fieldOptions\": {\n        \"values\": {{ $json.options }}\n      }\n   }\n]"
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "7db73660-3f99-42b6-843d-ee4adf758441",
+      "name": "Choose Todoist Project",
+      "type": "n8n-nodes-base.form",
+      "position": [
+        -260,
+        260
+      ],
+      "webhookId": "971affb1-c55c-4025-9b4b-743c8f3fcfcf",
+      "parameters": {
+        "options": {
+          "buttonLabel": "Continue"
+        },
+        "defineForm": "json",
+        "jsonOutput": "=[\n   {\n      \"fieldLabel\": \"Select Todoist Project\",\n      \"fieldType\": \"dropdown\",\n      \"requiredField\": true,\n      \"fieldOptions\": {\n        \"values\": {{ $json.options }}\n      }\n   }\n]"
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "3fe51a88-765f-469e-9846-191506b0a894",
+      "name": "Verify security token",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -580,
+        980
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "286fafb0-a200-4963-a19f-e63162c484b4",
+              "operator": {
+                "name": "filter.operator.equals",
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $('OAuth redirect').first().json.query.state }}",
+              "rightValue": "={{ $json.state }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 2.2
+    },
+    {
+      "id": "7a040b65-5cc3-44d6-8bf6-c6bb7dfe5128",
+      "name": "Generate security token",
+      "type": "n8n-nodes-base.crypto",
+      "position": [
+        -800,
+        620
+      ],
+      "parameters": {
+        "action": "generate",
+        "dataPropertyName": "state"
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "7033d868-2d83-45bb-a48b-f4fd6eb14e0d",
+      "name": "Store variables",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -580,
+        620
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nstaticData.clientID = $('Todoist Webhook Setup Helper').first().json['Client ID'];\nstaticData.clientSecret = $('Todoist Webhook Setup Helper').first().json['Client secret'];\nstaticData.state = $json.state;\n\nreturn $input.item;"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "d538d40a-599b-4255-a5e0-83d9b72f671e",
+      "name": "Get variables",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -800,
+        980
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\n$input.item.json.clientID = staticData.clientID;\n$input.item.json.clientSecret = staticData.clientSecret;\n$input.item.json.state = staticData.state;\n\nreturn $input.item;"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "7c895d16-e522-4b63-bee6-0cea3e3177dd",
+      "name": "Redirect to Auth Page",
+      "type": "n8n-nodes-base.form",
+      "position": [
+        -360,
+        620
+      ],
+      "webhookId": "41b4bc95-2938-4a53-a051-7a3079001329",
+      "parameters": {
+        "operation": "completion",
+        "redirectUrl": "=https://todoist.com{{ $json['Client ID'] }}&scope=task:add,data:read_write,data:delete&state={{ $json.state }}",
+        "respondWith": "redirect"
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "b72c6f9f-f821-4859-b75d-192541ce0d34",
+      "name": "OAuth redirect",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -1020,
+        980
+      ],
+      "webhookId": "7aee8b09-29e3-4e12-9b66-c6e8ab080bf7",
+      "parameters": {
+        "path": "7aee8b09-29e3-4e12-9b66-c6e8ab080bf7",
+        "options": {},
+        "httpMethod": [
+          "GET"
+        ],
+        "responseMode": "responseNode",
+        "multipleMethods": true
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "d0adcb66-4817-44f9-ad7e-320cff86aefe",
+      "name": "Exchange Tokens",
+      "type": "n8n-nodes-base.httpRequest",
+      "onError": "continueErrorOutput",
+      "position": [
+        -360,
+        880
+      ],
+      "parameters": {
+        "url": "https://todoist.com",
+        "method": "POST",
+        "options": {},
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $json.clientID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $json.clientSecret }}"
+            },
+            {
+              "name": "code",
+              "value": "={{ $('OAuth redirect').first().json.query.code }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 4.2
+    },
+    {
+      "id": "4fda8614-308c-4d66-ac7d-c2491ab5a86a",
+      "name": "Respond with success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        -140,
+        780
+      ],
+      "parameters": {
+        "options": {},
+        "respondWith": "text",
+        "responseBody": "Developer App activated successfully. The window can be closed now."
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "347fb99f-861f-483a-bc39-7341fe41439f",
+      "name": "Respond with error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        -140,
+        980
