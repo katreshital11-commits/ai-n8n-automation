@@ -1,0 +1,109 @@
+{
+  "name": "Production Demo - n8n Cloud + PostgreSQL Idempotency",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "enterprise-order-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e61d3ad6-1d1f-4c2e-8b0a-2a2c0c13a101",
+      "name": "Webhook - Receive Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "enterprise-order-event-demo"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-TUNNEL-HOST/api/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Demo-Api-Key",
+              "value": "REPLACE_WITH_DEMO_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.body ?? $json) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "e61d3ad6-1d1f-4c2e-8b0a-2a2c0c13a102",
+      "name": "Send to Local API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode ?? 200 }}"
+        }
+      },
+      "id": "e61d3ad6-1d1f-4c2e-8b0a-2a2c0c13a103",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        760,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Receive Event": {
+      "main": [
+        [
+          {
+            "node": "Send to Local API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Local API": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d4d5bb3f-7e7d-4ad0-bcad-4ef56b9d2c01",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

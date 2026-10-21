@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automation Operations Dashboard</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, Segoe UI, Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0b1120; color: #e5e7eb; }
+    header { padding: 24px 5%; border-bottom: 1px solid #263248; }
+    h1 { margin: 0 0 8px; font-size: 25px; }
+    p { color: #9ca3af; }
+    main { max-width: 1200px; margin: auto; padding: 24px; }
+    .toolbar, .cards, .panel { margin-bottom: 20px; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
+    input, button { padding: 12px; border-radius: 8px; border: 1px solid #374151; }
+    input { background: #111827; color: white; flex: 1; min-width: 220px; }
+    button { background: #2563eb; color: white; cursor: pointer; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 14px; }
+    .card, .panel { background: #111827; border: 1px solid #263248; border-radius: 12px; padding: 18px; }
+    .label { color: #9ca3af; font-size: 13px; }
+    .number { font-size: 30px; font-weight: 700; margin-top: 10px; }
+    .success { color: #34d399; }
+    .failure { color: #f87171; }
+    .panel h2 { font-size: 18px; margin-top: 0; }
+    #message { margin: 12px 0; color: #fbbf24; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th, td { padding: 12px 8px; border-bottom: 1px solid #263248; }
+    th { color: #9ca3af; font-size: 13px; }
+    footer { color: #9ca3af; font-size: 12px; padding: 12px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Automation Operations</h1>
+    <p>n8n · FastAPI · PostgreSQL · Event monitoring</p>
+  </header>
+  <main>
+    <div class="toolbar">
+      <input id="apiKey" type="password" autocomplete="off"
+             placeholder="Enter Demo API Key (not displayed)">
+      <button id="connect">Connect & Refresh</button>
+    </div>
+    <div id="message">Enter your API key to load dashboard data.</div>
+
+    <section class="cards">
+      <div class="card"><div class="label">Total Events</div><div class="number" id="total">—</div></div>
+      <div class="card"><div class="label">Successful Events</div><div class="number success" id="success">—</div></div>
+      <div class="card"><div class="label">Failed Events</div><div class="number failure" id="failed">—</div></div>
+      <div class="card"><div class="label">Business Effects</div><div class="number" id="effects">—</div></div>
+      <div class="card"><div class="label">Average Processing</div><div class="number" id="average">—</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Event Status</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Events</th><th>Average (ms)</th><th>Maximum (ms)</th></tr></thead>
+          <tbody id="statusRows"><tr><td colspan="4">Connect to load metrics.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent Events</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Event ID</th><th>Status</th><th>Received</th><th>Error</th></tr></thead>
+          <tbody id="recentRows"><tr><td colspan="4">Recent events endpoint will be connected in the next step.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <footer>Dashboard refreshes every 15 seconds while connected. Keep the API key private.</footer>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    let refreshTimer;
+
+    async function refreshDashboard() {
+      const key = $('apiKey').value.trim();
+      if (!key) {
+        $('message').textContent = 'Please enter your Demo API Key.';
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/metrics', {
+          headers: { 'X-Demo-Api-Key': key },
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error('Metrics request failed (HTTP ' + response.status + ')');
+        const data = await response.json();
+
+        $('total').textContent = data.total_unique_event_ids ?? 0;
+        $('effects').textContent = data.business_effects ?? 0;
+
+        let success = 0, failed = 0, durationSum = 0, durationCount = 0;
+        $('statusRows').replaceChildren();
+
+        for (const item of (data.by_status || [])) {
+          if (item.status === 'succeeded') success = item.events;
+          if (item.status === 'failed') failed = item.events;
+          if (item.avg_ms !== null && item.avg_ms !== undefined) {
+            durationSum += item.avg_ms * item.events;
+            durationCount += item.events;
+          }
+          const tr = document.createElement('tr');
+          [item.status, item.events, item.avg_ms ?? '—', item.max_ms ?? '—'].forEach(value => {
+            const td = document.createElement('td');
+            td.textContent = value;
+            tr.appendChild(td);
+          });
+          $('statusRows').appendChild(tr);
+        }
+
+        $('success').textContent = success;
+        $('failed').textContent = failed;
+        $('average').textContent = durationCount
+          ? (durationSum / durationCount).toFixed(2) + ' ms' : '—';
+        $('message').textContent = 'Connected. Last refreshed: ' + new Date().toLocaleTimeString();
+
+        // This endpoint will be added to the existing API in the next step.
+        try {
+          const recentResponse = await fetch('/api/events/recent', {
+            headers: { 'X-Demo-Api-Key': key },
+            cache: 'no-store'
+          });
+          if (recentResponse.ok) {
+            const recentData = await recentResponse.json();
+            $('recentRows').replaceChildren();
+            for (const item of (recentData.events || [])) {
+              const tr = document.createElement('tr');
+              [item.event_id, item.status, item.received_at, item.error_message || '—'].forEach(value => {
+                const td = document.createElement('td');
+                td.textContent = value ?? '—';
+                tr.appendChild(td);
+              });
+              $('recentRows').appendChild(tr);
+            }
+          }
+        } catch (_) { /* Recent-events endpoint is added separately. */ }
+      } catch (error) {
+        $('message').textContent = error.message + '. Check the API key and server.';
+      }
+    }
+
+    $('connect').addEventListener('click', () => {
+      refreshDashboard();
+      clearInterval(refreshTimer);
+      refreshTimer = setInterval(refreshDashboard, 15000);
+    });
+  </script>
+</body>
+</html>

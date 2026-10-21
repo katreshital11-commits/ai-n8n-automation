@@ -1,0 +1,34 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+.env.txt
+
+# Python virtual environments
+.venv/
+.venv_old/
+.venv313/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Logs
+*.log
+
+# Local backups
+backup_before_dashboard_*/
+*.before-*.md
+api_before_dashboard_routes.py
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local maintenance scripts
+fix_env.py
+add_dashboard_routes.py
