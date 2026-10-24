@@ -95,7 +95,17 @@ Node labels and field names may be adjusted to match the workflow version you bu
 
 ## Screenshots
 
-Screenshots of the workflow overview and the Billing, Manual Review, and Out-of-Scope test outputs were captured and shared in the related n8n Community discussion. To display images directly in this repository, add the image files to this folder and link them here.
+### Workflow Overview
+![Workflow Overview](./workflow-overview.png.png)
+
+### Billing Test
+![Billing Test](./billing-test.png.png)
+
+### Manual Review Test
+![Manual Review Test](./manual-review-test.png.png)
+
+### Out of Scope Test
+![Out of Scope Test](./out-of-scope-test.png.png)
 
 ## Credits
 
