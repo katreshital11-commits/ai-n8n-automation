@@ -97,24 +97,13 @@ Node labels and field names may be adjusted to match the workflow version you bu
 ## Screenshots
 
 ### Workflow Overview
-
 ![Workflow Overview](./workflow-overview.png.png)
 
 ### Billing Test
-
 ![Billing Test](./billing-test.png.png)
 
 ### Manual Review Test
-
 ![Manual Review Test](./manual-review-test.png.png)
 
 ### Out of Scope Test
-
 ![Out of Scope Test](./out-of-scope-test.png.png)
-
-## Credits
-
-- **Jeffy** text-classification API: https://playground.jeffyclassify.com/
-- **n8n** workflow automation: https://n8n.io/
-
-This project is an independent integration demo and is not an official Jeffy project.
