@@ -33,6 +33,11 @@ review required                       v            v
 
 The actual workflow is saved in n8n as **Jeffy AI Intent Classifier — Confidence & Review Routing**.
 
+**Download or inspect the workflow JSON:**  
+[Jeffy AI Intent Classifier — Confidence & Review Routing.json](./Jeffy%20AI%20Intent%20Classifier%20%E2%80%94%20Confidence%20%26%20Review%20Routing.json)
+
+To reproduce this demo, import the JSON workflow into your n8n workspace and configure the HTTP Request node and any required settings for your environment.
+
 ## API request
 
 The workflow sends a JSON request to:
@@ -63,14 +68,14 @@ These are example test observations from the demo, not a general accuracy benchm
 
 ## Important routing detail
 
-The Out of Scope branch checks whether the predicted `label` equals `oos`. In the observed response for that test, the API's separate `out_of_scope` Boolean was `false`. Therefore, this demo demonstrates **label-based OOS routing**, not routing based on the Boolean flag. This distinction is intentional and should be reviewed against the API's documented semantics before using the pattern in another workflow.
+The Out of Scope branch checks whether the predicted `label` equals `oos`. In the observed response for that test, the API's separate `out_of_scope` Boolean was `false`. Therefore, this demo demonstrates **label-based OOS routing**, not routing based on the Boolean flag. This distinction should be reviewed against the API's documented semantics before using the pattern in another workflow.
 
 The confidence branch uses a threshold of **0.8**. Predictions below that threshold are sent to Manual Review instead of being treated as confidently classified.
 
 ## How to reproduce
 
 1. Open an n8n Cloud workspace.
-2. Add a **Manual Trigger** (or manual execution trigger) and an **HTTP Request** node.
+2. Import the [workflow JSON](./Jeffy%20AI%20Intent%20Classifier%20%E2%80%94%20Confidence%20%26%20Review%20Routing.json), or add a **Manual Trigger** and an **HTTP Request** node.
 3. Configure the request as `POST` to `https://playground.jeffyclassify.com/v1/predict`, with JSON body fields `text` and `task`.
 4. Add an IF node to check `{{$json.label}}` equals `oos`.
 5. Route the true branch to an Edit Fields node that sets `department = Out of Scope`, `intent = oos`, and `review_required = true`.
