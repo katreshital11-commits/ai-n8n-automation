@@ -1,0 +1,342 @@
+{
+  "name": "Jeffy AI Intent Classifier — Confidence & Review Routing",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -192,
+        0
+      ],
+      "id": "074586e0-0e00-4fe1-b0a2-be7065cc48ec",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://playground.jeffyclassify.com/v1/predict",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "\n{\n  \"text\": \"Who won the 1998 FIFA World Cup?\",\n  \"task\": \"clinc_oos\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ec003a40-7d2c-4e54-aa45-1e16926ed642",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "2da43155-d722-41d8-a89e-e902c211aa71",
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": 0.8,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        16
+      ],
+      "id": "d2512fb1-adee-4f06-9604-1df9ae4eb882",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.label }}",
+                    "rightValue": "transaction_charged_twice",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "df59e811-0658-4658-8c7b-a7cbbbcd6abf"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Billing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.5,
+      "position": [
+        672,
+        -96
+      ],
+      "id": "490fcfd3-afb2-4951-a3c3-3ec56080b464",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cf19c02f-6bef-48ca-859c-6514b15ba050",
+              "name": "department",
+              "value": "Billing ",
+              "type": "string"
+            },
+            {
+              "id": "e5425cf0-270f-4a78-a8cd-edb023d30a69",
+              "name": "intent ",
+              "value": "={{ $json.label }}",
+              "type": "string"
+            },
+            {
+              "id": "90698191-324e-4ed6-bac2-e87695bb9359",
+              "name": "confidence",
+              "value": "={{ $json.confidence }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        896,
+        -96
+      ],
+      "id": "a0899bdb-ed85-4c5f-aa29-c2120eae8eb8",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d28f398e-51f1-4fd3-8e94-8b71e8b0e11c",
+              "name": "department",
+              "value": "Manual Review",
+              "type": "string"
+            },
+            {
+              "id": "8ffc218e-cff9-45b9-8a87-abdb490e3aa4",
+              "name": "intent",
+              "value": "={{ $json.label }}",
+              "type": "string"
+            },
+            {
+              "id": "208e6e43-0235-43b7-be2b-45b92930f572",
+              "name": "confidence",
+              "value": "={{ $json.confidence }}",
+              "type": "number"
+            },
+            {
+              "id": "821172cd-1e79-4bd8-9811-d1f358a7afc2",
+              "name": "review_required",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        688,
+        96
+      ],
+      "id": "a10f58a0-1abf-4eed-9059-da0b51df6578",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "7da25b4e-6e27-4ae3-a049-37b585b11315",
+              "leftValue": "={{ $json.label }}",
+              "rightValue": "oos",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        176,
+        0
+      ],
+      "id": "9a21b801-dfbf-451b-bd33-8e2ac168fe81",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "981d3245-2b88-4703-9f81-a13ba1b4b1c4",
+              "name": "department",
+              "value": "Out of Scope",
+              "type": "string"
+            },
+            {
+              "id": "2b004a52-7cfa-4563-9c8a-574f8ec9452a",
+              "name": "intent ",
+              "value": "={{ $json.label }}",
+              "type": "string"
+            },
+            {
+              "id": "fec66c11-4c99-46b3-a7b5-1a6231a82991",
+              "name": "confidence",
+              "value": "={{ $json.confidence }}",
+              "type": "number"
+            },
+            {
+              "id": "b1b30575-b1e4-4199-b596-af681c302d56",
+              "name": "review_required",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        448,
+        -160
+      ],
+      "id": "0f22b222-6628-4ddc-aa5e-692e170c035d",
+      "name": "Edit Fields2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2a7de7d8-b440-4aae-b31b-e4bd4d4ade5f",
+  "meta": {
+    "instanceId": "27bd3d3dc89c6dd640727ba8b13c17b074ec525e63eeb39943e3f3a1146d62dd"
+  },
+  "nodeGroups": [],
+  "id": "XYxpBW5zGOJmPLaq",
+  "tags": []
+}
