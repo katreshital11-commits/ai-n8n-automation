@@ -33,8 +33,9 @@ review required                       v            v
 
 The actual workflow is saved in n8n as **Jeffy AI Intent Classifier — Confidence & Review Routing**.
 
-**Download or inspect the workflow JSON:**  
-[Jeffy AI Intent Classifier — Confidence & Review Routing.json](./Jeffy%20AI%20Intent%20Classifier%20%E2%80%94%20Confidence%20%26%20Review%20Routing.json)
+**Download or inspect the workflow JSON:**
+
+[Download the n8n workflow JSON](./Jeffy%20AI%20Intent%20Classifier%20%E2%80%94%20Confidence%20%26%20Review%20Routing.json)
 
 To reproduce this demo, import the JSON workflow into your n8n workspace and configure the HTTP Request node and any required settings for your environment.
 
@@ -96,15 +97,19 @@ Node labels and field names may be adjusted to match the workflow version you bu
 ## Screenshots
 
 ### Workflow Overview
+
 ![Workflow Overview](./workflow-overview.png.png)
 
 ### Billing Test
+
 ![Billing Test](./billing-test.png.png)
 
 ### Manual Review Test
+
 ![Manual Review Test](./manual-review-test.png.png)
 
 ### Out of Scope Test
+
 ![Out of Scope Test](./out-of-scope-test.png.png)
 
 ## Credits
