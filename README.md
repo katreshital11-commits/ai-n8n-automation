@@ -1,4 +1,4 @@
-# ⚡ Reliable AI Automation & Event-Driven Systems
+# ⚡ Reliable n8n AI Automation | Python FastAPI, PostgreSQL, API Integrations, Event Validation & Idempotency
 
 Production-oriented AI automation workflows, event-driven integrations, data validation pipelines, and custom Python components built with n8n, PostgreSQL, Redis, APIs, and LLM-powered processing.
 
