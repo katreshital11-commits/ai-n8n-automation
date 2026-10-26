@@ -4,6 +4,14 @@ Production-oriented AI automation workflows, event-driven integrations, data val
 
 This repository demonstrates practical engineering patterns for reliable automation, including input validation, duplicate-event prevention, transactional database writes, structured AI outputs, and resilient workflow design.
 
+## 🎥 Project Demo Video
+
+Watch the Loom walkthrough of the n8n + FastAPI + PostgreSQL automation demo:
+
+**[Watch the automation demo on Loom](https://www.loom.com/share/7037a7b67a8a4984bdd69c9fc47f8883)**
+
+The walkthrough demonstrates the portfolio project's workflow and tested event-processing behavior. The demo is a portfolio project, not a production client deployment. Specific test outcomes should be interpreted as results from the shown test environment.
+
 ## 📊 Core Engineering Capabilities
 
 - **Event-Driven Processing:** Webhook-based automation workflows for routing events and coordinating downstream business operations.
@@ -27,7 +35,7 @@ This repository demonstrates practical engineering patterns for reliable automat
 
 ### 🛡️ 2. Validation & Data Processing
 
-- **`AI Powered_ Autonomous Real Estate NLP & Intent Engine -.json`** — AI-powered intent extraction for real-estate requests, including informal Roman Hinglish inputs such as *"kal dopahar 3 baje site visit"*. 
+- **`AI Powered_ Autonomous Real Estate NLP & Intent Engine -.json`** — AI-powered intent extraction for real-estate requests, including informal Roman Hinglish inputs such as *"kal dopahar 3 baje site visit"*.
 - **`Ai Powerd Zoho to WhatsApp Billing Engine (2).json`** — Invoice and billing automation connecting Zoho-related data processing with WhatsApp workflows.
 
 ### 🔐 3. Python Idempotency Gate
